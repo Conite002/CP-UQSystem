@@ -31,6 +31,7 @@ LR=0.001
 TRAIN_RATIO=0.7
 VAL_RATIO=0.15
 CAL_RATIO=0.15
+SAVE_SPLITS_PATH='data/mnist_splits.pkl'
 
 # 2. Parse named arguments
 while [[ $# -gt 0 ]]; do
@@ -71,6 +72,11 @@ while [[ $# -gt 0 ]]; do
       shift
       shift
       ;;
+    --save_splits_path)
+      SAVE_SPLITS_PATH="$2",
+      shift
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
       shift
@@ -78,7 +84,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# 3. Print configuration
 echo "=== Starting training ==="
 echo "Model Path:    $MODEL_PATH"
 echo "Batch Size:    $BATCH_SIZE"
@@ -87,8 +92,8 @@ echo "Learning Rate: $LR"
 echo "Train Ratio:   $TRAIN_RATIO"
 echo "Val Ratio:     $VAL_RATIO"
 echo "Cal Ratio:     $CAL_RATIO"
+echo "Save Splits Path: $SAVE_SPLITS_PATH"
 
-# 4. Run Python training code
 python -c "
 import sys
 import os
@@ -104,32 +109,17 @@ print(f'[INFO] Splits => train_ratio=${TRAIN_RATIO}, val_ratio=${VAL_RATIO}, cal
 
 # 5. Call the training function
 trained_model, calibration_loader = train_baseline(
+    model_path=str('${MODEL_PATH}'),
     epochs=int('${EPOCHS}'),
     lr=float('${LR}'),
     batch_size=int('${BATCH_SIZE}'),
     train_ratio=float('${TRAIN_RATIO}'),
     val_ratio=float('${VAL_RATIO}'),
     cal_ratio=float('${CAL_RATIO}'),
-    seed=42
+    seed=42,
+    save_splits_path=str('${SAVE_SPLITS_PATH}')
 )
 
-# 6. Save the model inside train_baseline (or here). If train_baseline
-#    already saves the model, you can remove or adapt this step.
-
-# We'll define a temporary path to store the model:
-model_path_temp = 'trained_model_temp.pth'
-
-import torch
-torch.save(trained_model.state_dict(), model_path_temp)
-print(f'[INFO] Temporary model path returned: {model_path_temp}')
-
-if os.path.exists(model_path_temp):
-    # Move or rename the output to the specified MODEL_PATH
-    os.makedirs(os.path.dirname('${MODEL_PATH}'), exist_ok=True)
-    shutil.move(model_path_temp, '${MODEL_PATH}')
-    print(f'[INFO] Model saved at: ${MODEL_PATH}')
-else:
-    print(f'[WARNING] {model_path_temp} not found. Check your training function output.')
 "
 
 echo "=== Training completed ==="

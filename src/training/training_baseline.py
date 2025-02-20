@@ -7,7 +7,7 @@ from tqdm import tqdm
 from sklearn.metrics import accuracy_score, recall_score, f1_score, classification_report
 from src.models.base_model import SimpleMNISTModel
 from src.data.mnist_data import get_mnist_loaders 
-
+import os
 
 def train_baseline(
     epochs=10,
@@ -19,7 +19,9 @@ def train_baseline(
     seed=42,
     step_size=5,
     gamma=0.1,
-    patience=5
+    patience=5,
+    model_path="src/src/checkpoints/_mnist.pth",
+    save_splits_path="data/mnist_splits.pkl"
 ):
     """
     Trains a baseline CNN on MNIST using separate train, val, cal, and test sets,
@@ -50,7 +52,8 @@ def train_baseline(
         train_ratio=train_ratio,
         val_ratio=val_ratio,
         cal_ratio=cal_ratio,
-        seed=seed
+        seed=seed,
+        save_splits_path=save_splits_path
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -60,21 +63,17 @@ def train_baseline(
     criterion = nn.CrossEntropyLoss()
     print(f"Device :{device}")
     best_val_accuracy = 0.0
-    best_model_path = "baseline_mnist.pth"
+    os.makedirs("src/checkpoints", exist_ok=True)
+    best_model_path = model_path
 
-    # Early stopping variables
     epochs_without_improvement = 0
 
     for epoch in range(epochs):
-        # -------------------
-        # 3. Training phase
-        # -------------------
         model.train()
         train_losses = []
         train_preds = []
         train_labels_list = []
 
-        # TQDM progress bar for training
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]", leave=False)
         for images, labels in train_pbar:
             images, labels = images.to(device), labels.to(device)
@@ -87,20 +86,16 @@ def train_baseline(
 
             train_losses.append(loss.item())
 
-            # Collect predictions & labels for metrics
             _, predicted = torch.max(outputs, 1)
             train_preds.extend(predicted.cpu().tolist())
             train_labels_list.extend(labels.cpu().tolist())
 
-        # Compute training metrics
         train_loss = sum(train_losses) / len(train_losses)
         train_acc = accuracy_score(train_labels_list, train_preds)
         train_recall = recall_score(train_labels_list, train_preds, average='macro')
         train_f1 = f1_score(train_labels_list, train_preds, average='macro')
 
-        # -----------------------
-        # 4. Validation phase
-        # -----------------------
+
         model.eval()
         val_losses = []
         val_preds = []
@@ -124,35 +119,27 @@ def train_baseline(
         val_recall = recall_score(val_labels_list, val_preds, average='macro')
         val_f1 = f1_score(val_labels_list, val_preds, average='macro')
 
-        # Print metrics for this epoch
         print(f"\nEpoch [{epoch+1}/{epochs}]")
         print(f"  Train Loss: {train_loss:.4f} | Acc: {train_acc*100:.2f}% | Recall: {train_recall:.3f} | F1: {train_f1:.3f}")
         print(f"  Val   Loss: {val_loss:.4f}   | Acc: {val_acc*100:.2f}%   | Recall: {val_recall:.3f}   | F1: {val_f1:.3f}")
 
-        # -----------------------
-        # 5. Check for best model
-        # -----------------------
+
         val_accuracy_percent = val_acc * 100.0
         if val_accuracy_percent > best_val_accuracy:
             best_val_accuracy = val_accuracy_percent
-            torch.save(model.state_dict(), best_model_path)
-            print(f"  [INFO] New best model saved with val_acc: {val_accuracy_percent:.2f}%")
-            epochs_without_improvement = 0  # reset patience counter
+            torch.save(model.state_dict(), best_model_path )
+            print(f"  [INFO] New best model saved with val_acc: {val_accuracy_percent:.2f}% at: {best_model_path}" )
+            epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
 
-        # Early stopping check
         if epochs_without_improvement >= patience:
             print(f"\n[EARLY STOPPING] No improvement in validation accuracy for {patience} consecutive epochs.")
             print(f"Best validation accuracy so far: {best_val_accuracy:.2f}%")
             break
 
-        # Step the LR scheduler
         scheduler.step()
 
-    # -----------------------
-    # 6. Final evaluation on test
-    # -----------------------
     print(f"\nTraining complete. Best validation accuracy: {best_val_accuracy:.2f}%")
     model.load_state_dict(torch.load(best_model_path))
     model.eval()
@@ -180,7 +167,6 @@ def train_baseline(
 
     print(f"Test Loss: {test_loss:.4f} | Acc: {test_acc*100:.2f}% | Recall: {test_recall:.3f} | F1: {test_f1:.3f}")
 
-    # 7. Per-class statistics
     print("\n=== Per-Class Classification Report (Test Set) ===")
     target_names = [str(i) for i in range(10)]  # MNIST classes 0-9
     print(classification_report(test_labels_list, test_preds, target_names=target_names))
