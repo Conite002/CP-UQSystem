@@ -8,7 +8,6 @@ class SimpleMNISTModel(nn.Module):
         self.conv1 = nn.Conv2d(1, 32, kernel_size=3)      
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3)
         self.num_classes = num_classes
-
         self.fc1 = nn.Linear(64 * 12 * 12, 128)
         self.fc2 = nn.Linear(128, 10)
 

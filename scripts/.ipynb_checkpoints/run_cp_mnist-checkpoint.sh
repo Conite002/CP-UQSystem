@@ -65,7 +65,12 @@ done
 echo "=== Running conformal calibration ==="
 echo "Alpha:              $ALPHA"
 echo "Seed:               $SEED"
-echo "Num Samples to Show $NUM_SAMPLES_TO_SHOW"
+if (( $(echo "$NUM_SAMPLES_TO_SHOW <= 1" | bc -l) )); then
+    PERCENTAGE=$(echo "$NUM_SAMPLES_TO_SHOW * 100" | bc)
+    echo "Num Samples to Show ${PERCENTAGE}%"
+else
+    echo "Num Samples to Show $NUM_SAMPLES_TO_SHOW"
+fi
 echo "Batch Size:         $BATCH_SIZE"
 echo "Splits Path:        $SPLITS_PATH"
 echo "Epochs:             $EPOCHS"
@@ -99,7 +104,8 @@ posthoc_conformal_calibration(
     alpha=${ALPHA},
     seed=${SEED},
     num_samples_to_show=${NUM_SAMPLES_TO_SHOW},
-    num_epochs=${EPOCHS}
+    num_epochs=${EPOCHS},
+    
 )
 "
 

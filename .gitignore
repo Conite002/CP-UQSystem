@@ -1,0 +1,12 @@
+
+# Ignore all model weight files
+*.pth
+*.ckpt
+*.h5
+*.weights
+*.onnx
+*.tflite
+
+# Ignore checkpoint directories
+checkpoints/
+logs/
