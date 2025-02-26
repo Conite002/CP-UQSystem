@@ -32,9 +32,13 @@ class GradCAM:
         for name, module in self.model.named_modules():
             if name == self.target_layer:
                 module.register_forward_hook(forward_hook)
-                module.register_backward_hook(backward_hook)
+                module.register_full_backward_hook(backward_hook)  # Fix: Use register_full_backward_hook()
+                found_layer = True
                 break
+        if not found_layer:
+            raise ValueError(f"[ERROR] Target layer '{self.target_layer}' not found in model.")
 
+            
     def generate_cam(self, class_idx):
         """
         Computes the Grad-CAM heatmap for a given class index.
@@ -46,7 +50,8 @@ class GradCAM:
             torch.Tensor: Heatmap tensor.
         """
         if self.gradients is None or self.activations is None:
-            raise ValueError("Gradients or activations not captured. Ensure a forward and backward pass is performed.")
+            print("[ERROR] Gradients or activations not captured. Ensure a forward and backward pass is performed.")
+            return None
 
         pooled_gradients = torch.mean(self.gradients, dim=[0, 2, 3])
         cam = torch.zeros(self.activations.shape[2:], dtype=torch.float32)
@@ -72,6 +77,6 @@ class GradCAM:
         """
         self.model.zero_grad()
         output = self.model(input_tensor.unsqueeze(0))
-        target_output = output[:, class_idx]
-        target_output.backward()
+        target_output = output[:, class_idx].sum()
+        target_output.backward(retain_graph=True)
         return self.generate_cam(class_idx)

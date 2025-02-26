@@ -1,6 +1,10 @@
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+import sys
+sys.path.append('src/torchcp_integration/')
+sys.path.append('src/')
+sys.path.append('src/torchcp_integration/predictors')
 from torchcp.classification.predictor import SplitPredictor, ClassWisePredictor, ClusteredPredictor, WeightedPredictor
 from predictors.split import SplitPredictor_CM
 from torchcp.classification.score import APS, RAPS, SAPS, TOPK, KNN
@@ -75,36 +79,23 @@ def posthoc_conformal_calibration(
     mc_dropout=False,
     mc_samples=10,
     ensemble_models=None,
-    init_temperatures=[0.5, 1.0, 1.5],
+    init_temperatures=[1.5],
     num_samples_to_show=5,
     use_interpretability=False
 
 ):
-    """
-    Runs multiple TorchCP score & predictor methods for each temperature in init_temperatures.
-    Returns a Pandas DataFrame with coverage & set-size results for easy plotting.
 
-    Args:
-        model (nn.Module): Base classification model.
-        cal_loader, test_loader: DataLoaders for calibration/test sets.
-        device (torch.device or None): CPU/GPU. If None, auto-detect.
-        alpha (float): Significance level (1 - coverage).
-        seed (int): Random seed for reproducibility.
-        num_classes (int): e.g., 10 for MNIST.
-        init_temperatures (list): List of initial temps to test, e.g. [0.5, 1.0, 1.5].
-
-    Returns:
-        pd.DataFrame: Columns = [
-            'Temperature', 'Phase', 'ScoreMethod', 'Predictor', 
-            'CoverageRate', 'AvgSetSize'
-        ]
-    """
     set_seed(seed)
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
 
+    if ensemble_models is not None:
+        for model  in ensemble_models:
+            model.eval()
+
+    print(f"isinstance(model, list)  : {isinstance(ensemble_models, list) }")
     score_methods = {
         "APS":  APS(score_type="softmax", randomized=True),
         "RAPS": RAPS(score_type="softmax", randomized=True, penalty=0.1, kreg=1),
@@ -116,21 +107,24 @@ def posthoc_conformal_calibration(
         # "SplitPredictor": SplitPredictor,
         "SplitPredictor_CM": SplitPredictor_CM,
         # "ClassWisePredictor": ClassWisePredictor,
-        # "ClusteredPredictor": ClusteredPredictor
+        "ClusteredPredictor": ClusteredPredictor
     }
 
     results_list = []
-                
-    for temp in tqdm(init_temperatures, desc="Processing Initial Temperatures"):
+    for temp in tqdm(init_temperatures, desc="Processing"):
 
-        print(f"\n[INFO] Gathering logits for Temperature {temp} (Before TS)")
+        print(f"\n[INFO] Gathering logits ")
         cal_logits, cal_labels = gather_logits_labels(model, cal_loader, device, mc_dropout, mc_samples, ensemble_models)
         test_logits, test_labels = gather_logits_labels(model, test_loader, device, mc_dropout, mc_samples, ensemble_models)
-        score_methods["KNN"] = KNN(features=cal_logits, labels=cal_labels, num_classes=num_classes, k=5, p=2)
+        score_methods["KNN"] = KNN(features=cal_logits, labels=cal_labels, num_classes=num_classes, k=10, p=2)
 
         for score_name, score_obj in score_methods.items():
             for predictor_name, predictor_cls in predictor_classes.items():
-                predictor = predictor_cls(score_function=score_obj, model=model)
+                if predictor_name == "SplitPredictor_CM":
+                    predictor = predictor_cls(score_function=score_obj, model=ensemble_models, use_mc_dropout=mc_dropout)
+                else :
+                    predictor = predictor_cls(score_function=score_obj, model=model)
+                    
                 predictor.calibrate(cal_loader, alpha=alpha)
                 result_dict = predictor.evaluate(test_loader)
 
@@ -139,14 +133,26 @@ def posthoc_conformal_calibration(
                 sample_images = sample_images.to(device)
                 pred_sets = predictor.predict(sample_images)
 
-                print("\n=== Prediction Sets ===")
+                print(f"\n=== Prediction Sets {score_name} ===")
                 for i, (pset, true_label) in enumerate(zip(pred_sets[:num_samples_to_show], sample_labels[:num_samples_to_show])):
                     predicted_classes = {idx for idx, val in enumerate(pset) if val.item() == 1}
                     print(f"Sample {i}: True Label={true_label.item()}, Prediction Set={predicted_classes}")
-                    if use_interpretability:
-                        interpretability = GradCAM(model, sample_images)
-                        interpretability.show_maps()
-                        visualize_gradcam(interpretability, sample_images, true_label)
+
+                sample_images.requires_grad = True
+                model.train() 
+                output = model(sample_images)
+                class_idx = sample_labels[0].item()
+                model.zero_grad()
+                output[:, class_idx].sum().backward(retain_graph=True) 
+                if use_interpretability:
+                    grad_cam = GradCAM(model, target_layer="conv2")
+                    heatmap = grad_cam.generate_cam(class_idx)
+                
+                if heatmap is not None:
+                    visualize_gradcam(heatmap, sample_images[0], title=f"Grad-CAM for Sample {sample_labels[0].item()}")
+            
+
+        
                 results_list.append({
                     "Temperature": temp,
                     "ScoreMethod": score_name,

@@ -21,7 +21,7 @@
 
 ALPHA=0.1
 SEED=42
-NUM_SAMPLES_TO_SHOW=5
+NUM_SAMPLES_TO_SHOW=10
 BATCH_SIZE=64
 SPLITS_PATH="src/data/mnist_splits.pkl"
 EPOCHS=10
@@ -110,16 +110,49 @@ import torch
 from src.torchcp_integration.conformal_utils import posthoc_conformal_calibration
 from src.data.mnist_data import get_mnist_loaders
 from src.models.base_model import SimpleMNISTModel
+import os
+
+# Base Model of deep Ensembles :
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class BaselineCNN(nn.Module):
+    def __init__(self, num_classes=10):
+        super(BaselineCNN, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.fc1 = nn.Linear(64 * 7 * 7, 128)
+        self.fc2 = nn.Linear(128, num_classes)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(-1, 64 * 7 * 7)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = SimpleMNISTModel()
 model.load_state_dict(torch.load('src/checkpoints/baseline_mnist.pth', map_location=device))
 
+def load_ensemble_models(num_models=5, save_dir='src/models/deep_ensembles_models', device='cpu'):
+    models = []
+    for i in range(num_models):
+        model = BaselineCNN()
+        model.load_state_dict(torch.load(os.path.join(save_dir, f'model_{i}.pth'), map_location=device))
+        model.to(device)
+        model.eval()
+        models.append(model)
+    return models
+
 # Load Ensemble Models (If Enabled)
 ensemble_models = None
 if '${ENSEMBLE_MODELS}' == 'True':
-    from src.models.ensemble import load_ensemble_models
-    ensemble_models = load_ensemble_models('src/checkpoints/ensemble_models/')
+    ensemble_models = load_ensemble_models()
 
 # Load DataLoaders
 train_loader, val_loader, cal_loader, test_loader = get_mnist_loaders(
