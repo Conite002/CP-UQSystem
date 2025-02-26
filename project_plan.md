@@ -54,7 +54,7 @@ sion models
 ---
 
 ## 5. Evaluate with TorchCP Metrics (and Additional Interpretability)
-
+   
 1. **Conformal Metrics**  
    - TorchCP provides metrics like **Coverage**, **Size**, **CovGap**, **Selection Ratio**, **SCE (Set Calibration Error)**.  
    - These help you assess how well the conformal sets match your target coverage and how large the predictive sets are on average.

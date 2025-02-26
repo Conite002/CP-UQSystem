@@ -13,7 +13,7 @@ mkdir -p scripts
 
 # Create files
 touch README.md
-touch environment.yml  # or use requirements.txt if you prefer
+touch environment.yml
 touch notebooks/EDA.ipynb
 touch notebooks/model_experiments.ipynb
 touch src/models/base_model.py
