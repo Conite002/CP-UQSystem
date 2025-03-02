@@ -17,6 +17,7 @@ class GradCAM:
         self.target_layer = target_layer
         self.gradients = None
         self.activations = None
+        print(f"[INFO] Initializing Grad-CAM for layer: {self.target_layer}")
         self.hook_layers()
 
     def hook_layers(self):
@@ -29,14 +30,18 @@ class GradCAM:
         def backward_hook(module, grad_input, grad_output):
             self.gradients = grad_output[0]
 
+        found_layer = False
         for name, module in self.model.named_modules():
             if name == self.target_layer:
                 module.register_forward_hook(forward_hook)
-                module.register_full_backward_hook(backward_hook)  # Fix: Use register_full_backward_hook()
+                module.register_full_backward_hook(backward_hook)  #  Fix: Use register_full_backward_hook()
                 found_layer = True
+                print(f"[INFO] Hooks registered successfully for layer: {self.target_layer}")
                 break
+
         if not found_layer:
             raise ValueError(f"[ERROR] Target layer '{self.target_layer}' not found in model.")
+        
 
             
     def generate_cam(self, class_idx):
@@ -53,6 +58,7 @@ class GradCAM:
             print("[ERROR] Gradients or activations not captured. Ensure a forward and backward pass is performed.")
             return None
 
+        print("[INFO] Computing Grad-CAM heatmap...")
         pooled_gradients = torch.mean(self.gradients, dim=[0, 2, 3])
         cam = torch.zeros(self.activations.shape[2:], dtype=torch.float32)
 
@@ -62,6 +68,7 @@ class GradCAM:
         cam = F.relu(cam)
         cam -= cam.min()
         cam /= cam.max() 
+        print("[INFO] Grad-CAM heatmap generated successfully.")
         return cam.cpu().detach()
 
     def compute(self, input_tensor, class_idx):
@@ -75,8 +82,13 @@ class GradCAM:
         Returns:
             torch.Tensor: Grad-CAM heatmap.
         """
-        self.model.zero_grad()
+        print("[INFO] Running Grad-CAM computation...")
+        self.model.train()  
+        input_tensor.requires_grad = True
         output = self.model(input_tensor.unsqueeze(0))
         target_output = output[:, class_idx].sum()
+
+        self.model.zero_grad()
+
         target_output.backward(retain_graph=True)
         return self.generate_cam(class_idx)

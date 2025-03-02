@@ -8,6 +8,8 @@ from sklearn.metrics import accuracy_score, recall_score, f1_score, classificati
 from src.models.base_model import SimpleMNISTModel
 from src.data.mnist_data import get_mnist_loaders 
 import os
+import pandas as pd
+
 
 def train_baseline(
     epochs=10,
@@ -20,8 +22,8 @@ def train_baseline(
     step_size=5,
     gamma=0.1,
     patience=5,
-    model_path="src/src/checkpoints/_mnist.pth",
-    save_splits_path="data/mnist_splits.pkl"
+    model_path="../src/checkpoints/_mnist.pth",
+    save_splits_path="../data/mnist_splits.pkl"
 ):
     """
     Trains a baseline CNN on MNIST using separate train, val, cal, and test sets,
@@ -63,7 +65,7 @@ def train_baseline(
     criterion = nn.CrossEntropyLoss()
     print(f"Device :{device}")
     best_val_accuracy = 0.0
-    os.makedirs("src/checkpoints", exist_ok=True)
+    os.makedirs("../src/checkpoints", exist_ok=True)
     best_model_path = model_path
 
     epochs_without_improvement = 0
@@ -172,4 +174,123 @@ def train_baseline(
     print(classification_report(test_labels_list, test_preds, target_names=target_names))
 
     return model, cal_loader
+
+#-----------------------------------------------------------------SINGLE-------------------------------------------------------------------------
+def train_single_model(
+    model, train_loader, val_loader, device, epochs=10, lr=1e-3, step_size=5, gamma=0.1, patience=5,
+    save_path="../src/checkpoints/mnist_model.pth", results_path="../src/results/single_model_training.csv"
+):
+    """
+    Trains a single SimpleMNISTModel and saves training results for plotting.
+
+    Args:
+        model (nn.Module): The model to train.
+        train_loader (DataLoader): Training dataset loader.
+        val_loader (DataLoader): Validation dataset loader.
+        device (torch.device): Device to train on (CPU/GPU).
+        epochs (int): Number of training epochs.
+        lr (float): Learning rate.
+        step_size (int): StepLR decay step.
+        gamma (float): Learning rate decay factor.
+        patience (int): Early stopping patience.
+        save_path (str): Path to save the best model.
+        results_path (str): Path to save training logs.
+
+    Returns:
+        dict: Best validation accuracy and training logs.
+    """
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    os.makedirs(os.path.dirname(results_path), exist_ok=True)
+
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+    criterion = nn.CrossEntropyLoss()
+
+    best_val_accuracy = 0.0
+    epochs_without_improvement = 0
+    training_logs = []
+
+    model.to(device)
+
+    for epoch in range(epochs):
+        model.train()
+        train_losses, train_preds, train_labels_list = [], [], []
+
+        train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]", leave=False)
+        for images, labels in train_pbar:
+            images, labels = images.to(device), labels.to(device)
+            optimizer.zero_grad()
+
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            train_losses.append(loss.item())
+            _, predicted = torch.max(outputs, 1)
+            train_preds.extend(predicted.cpu().tolist())
+            train_labels_list.extend(labels.cpu().tolist())
+
+        train_loss = sum(train_losses) / len(train_losses)
+        train_acc = accuracy_score(train_labels_list, train_preds) * 100
+        train_recall = recall_score(train_labels_list, train_preds, average="macro")
+        train_f1 = f1_score(train_labels_list, train_preds, average="macro")
+
+        # Validation Phase
+        model.eval()
+        val_losses, val_preds, val_labels_list = [], [], []
+
+        with torch.no_grad():
+            val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]", leave=False)
+            for images, labels in val_pbar:
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+
+                val_losses.append(loss.item())
+                _, predicted = torch.max(outputs, 1)
+                val_preds.extend(predicted.cpu().tolist())
+                val_labels_list.extend(labels.cpu().tolist())
+
+        val_loss = sum(val_losses) / len(val_losses)
+        val_acc = accuracy_score(val_labels_list, val_preds) * 100
+        val_recall = recall_score(val_labels_list, val_preds, average="macro")
+        val_f1 = f1_score(val_labels_list, val_preds, average="macro")
+
+        print(f"\nEpoch [{epoch+1}/{epochs}]")
+        print(f"  Train Loss: {train_loss:.4f} | Acc: {train_acc:.2f}% | Recall: {train_recall:.3f} | F1: {train_f1:.3f}")
+        print(f"  Val   Loss: {val_loss:.4f}   | Acc: {val_acc:.2f}%   | Recall: {val_recall:.3f}   | F1: {val_f1:.3f}")
+
+        if val_acc > best_val_accuracy:
+            best_val_accuracy = val_acc
+            torch.save(model.state_dict(), save_path)
+            print(f"  [INFO] New best model saved with val_acc: {val_acc:.2f}% at: {save_path}")
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+
+        if epochs_without_improvement >= patience:
+            print(f"\n[EARLY STOPPING] No improvement in validation accuracy for {patience} epochs.")
+            break
+
+        scheduler.step()
+
+        training_logs.append({
+            "Epoch": epoch + 1,
+            "Train Loss": train_loss,
+            "Train Accuracy": train_acc,
+            "Train Recall": train_recall,
+            "Train F1": train_f1,
+            "Val Loss": val_loss,
+            "Val Accuracy": val_acc,
+            "Val Recall": val_recall,
+            "Val F1": val_f1
+        })
+
+    df_logs = pd.DataFrame(training_logs)
+    df_logs.to_csv(results_path, index=False)
+    print(f"[INFO] Training logs saved at {results_path}")
+
+    return {"best_val_accuracy": best_val_accuracy, "training_logs": training_logs}
 

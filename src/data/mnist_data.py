@@ -50,14 +50,14 @@ def get_mnist_loaders(
     ])
 
     full_train_dataset = torchvision.datasets.MNIST(
-        root='data/',
+        root='../data/',
         train=True,
         download=True,
         transform=transform
     )
 
     test_dataset = torchvision.datasets.MNIST(
-        root='data/',
+        root='../data/',
         train=False,
         download=True,
         transform=transform
