@@ -138,7 +138,7 @@ A typical directory layout might look like this:
    pip install torchcp
    ```
 
-### 4.3. Dataset Preparation
+<!-- ### 4.3. Dataset Preparation
 
 - **Breast Cancer**: [CBIS-DDSM](https://wiki.cancerimagingarchive.net/display/Public/CBIS-DDSM) or [INbreast](https://medicalresearch.inesctec.pt/INbreast/)  
 - **Cervical (Gynecological) Cancer**: [Herlev Dataset](https://www.kaggle.com/datasets/andrewmvd/cervical-cancer-cell-segmentation) or ISBI Challenges
@@ -148,7 +148,7 @@ A typical directory layout might look like this:
    - Convert or preprocess images (e.g., normalization, resizing) and store results in `data/processed/`.
 
 2. **Update Config Files**  
-   - In `src/configs/data_config.yaml` (if using a YAML-based approach), specify dataset paths, normalization parameters, etc.
+   - In `src/configs/data_config.yaml` (if using a YAML-based approach), specify dataset paths, normalization parameters, etc. -->
 
 ---
 
@@ -214,24 +214,7 @@ A typical directory layout might look like this:
 
 ---
 
-## 7. Contributing
-
-We welcome contributions from the community!  
-1. **Fork** this repository and **create a feature branch**.  
-2. **Submit a Pull Request** describing your changes.  
-3. Adhere to our **coding standards** (PEP 8 for Python).  
-
-Please open an **issue** for feature requests or bug reports.
-
----
-
-## 8. License
-
-This project is licensed under the [MIT License](LICENSE). Please see the `LICENSE` file for more details.
-
----
-
-## 9. Acknowledgments
+## Acknowledgments
 
 - **TorchCP** developers for providing the conformal prediction framework.  
 - **Clinical collaborators** who provided guidance on annotation and dataset selection.  
@@ -239,7 +222,7 @@ This project is licensed under the [MIT License](LICENSE). Please see the `LICEN
 
 ---
 
-## 10. References
+## References
 
 1. **TorchCP Documentation**: [https://torchcp.readthedocs.io/](https://torchcp.readthedocs.io/)  
 2. **CBIS-DDSM**: [https://wiki.cancerimagingarchive.net/display/Public/CBIS-DDSM](https://wiki.cancerimagingarchive.net/display/Public/CBIS-DDSM)  
